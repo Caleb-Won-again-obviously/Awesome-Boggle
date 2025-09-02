@@ -37,6 +37,7 @@ html, body {
   font-weight: 800;
   font-size: 6vmin;
   user-select: none;
+  cursor: pointer;
 }
 
 #controls {
@@ -138,7 +139,7 @@ button { padding: 0.5rem 1rem; border-radius: 8px; border:none; cursor:pointer; 
 <div id="wordList"></div>
 <div id="endText"></div>
 
-<script src="dictionary.js"></script>
+<script src="dictionary.js"></script> <!-- Your CHONGUS dictionary JSON -->
 <script>
 let dictionarySet = new Set(Object.keys(dictionary).map(w=>w.toLowerCase()));
 document.getElementById('debug').textContent = `Dictionary loaded! Words: ${dictionarySet.size}`;
@@ -163,42 +164,18 @@ let foundWords = new Set();
 let cellBgColor = '#222';
 let cellTextColor = '#fff';
 let currentBoard = [];
-
-// Touch word building
-let currentTappedWord = "";
-let tappedPath = [];
-const tappedDisplay = document.createElement('div');
-tappedDisplay.style.fontSize = '3vmin';
-tappedDisplay.style.margin = '1rem auto';
-tappedDisplay.style.textAlign = 'center';
-document.body.insertBefore(tappedDisplay, document.getElementById('controls'));
-function updateTappedDisplay(){ tappedDisplay.textContent = currentTappedWord.toUpperCase(); }
-
-const submitBtn = document.createElement('button');
-submitBtn.textContent = "Submit Word";
-submitBtn.onclick = ()=>{
-  const word = currentTappedWord.toLowerCase();
-  if(word && !foundWords.has(word) && dictionarySet.has(word)){
-    foundWords.add(word);
-    const points = Math.max(word.length-2,0);
-    updateScore(points);
-    const li = document.createElement('div');
-    li.textContent = word;
-    document.getElementById('wordList').appendChild(li);
-  }
-  currentTappedWord=""; tappedPath=[]; updateTappedDisplay();
-};
-
-const clearBtn = document.createElement('button');
-clearBtn.textContent = "Clear";
-clearBtn.onclick = ()=>{ currentTappedWord=""; tappedPath=[]; updateTappedDisplay(); };
-
-document.getElementById('controls').appendChild(submitBtn);
-document.getElementById('controls').appendChild(clearBtn);
+let tapWord = "";
+let autoSubmitTimeout = null;
 
 // ----------------------- HELPERS -----------------------
 function shuffle(arr){ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 function pad(n){ return String(n).padStart(2,'0'); }
+function resetAutoSubmit(){
+  if(autoSubmitTimeout) clearTimeout(autoSubmitTimeout);
+  autoSubmitTimeout = setTimeout(()=>{
+    autoSubmitWord();
+  },2000);
+}
 
 // ----------------------- BOARD -----------------------
 function createBoard(){
@@ -217,15 +194,13 @@ function createBoard(){
       cell.textContent = chosen;
       cell.style.background = cellBgColor;
       cell.style.color = cellTextColor;
+      cell.addEventListener('click', ()=>{
+        tapWord += chosen.toLowerCase();
+        document.getElementById('wordInput').value = tapWord;
+        resetAutoSubmit();
+      });
       boardDiv.appendChild(cell);
       row.push(chosen.toLowerCase());
-
-      // Tap listener
-      cell.addEventListener('click', ()=>{
-        currentTappedWord += currentBoard[i][j];
-        tappedPath.push([i,j]);
-        updateTappedDisplay();
-      });
     }
     currentBoard.push(row);
   }
@@ -253,7 +228,6 @@ function gameOver(){
   stopSpin();
 
   const t = document.getElementById('endText');
-  t.innerHTML='';
   t.textContent = 'PAY ATTENTION! BOGGLE DONE! BOGGLE DONE!';
   t.style.display = 'block';
   t.style.transform = 'translate(-50%,-50%) rotate(0deg)';
@@ -333,23 +307,33 @@ function isWordOnBoard(word){
 }
 
 // ----------------------- WORD INPUT -----------------------
-document.getElementById('wordInput').addEventListener('keydown', e=>{
-  if(e.key==='Enter'){
-    const word = e.target.value.trim().toLowerCase();
-    if(!word){ e.target.value=''; return; }
-    if(foundWords.has(word)){ e.target.value=''; return; }
+function submitWord(word){
+  if(!word) return;
+  word = word.trim().toLowerCase();
+  if(!word) return;
+  if(foundWords.has(word)) return;
 
-    if(dictionarySet.has(word) && isWordOnBoard(word)){
-      foundWords.add(word);
-      const points = Math.max(word.length-2,0);
-      updateScore(points);
-      const li = document.createElement('div');
-      li.textContent = word;
-      document.getElementById('wordList').appendChild(li);
-      e.target.value='';
-    } else {
-      e.target.value='';
-    }
+  if(dictionarySet.has(word) && isWordOnBoard(word)){
+    foundWords.add(word);
+    const points = Math.max(word.length-2,0);
+    updateScore(points);
+    const li = document.createElement('div');
+    li.textContent = word;
+    document.getElementById('wordList').appendChild(li);
+  }
+  document.getElementById('wordInput').value='';
+  tapWord = "";
+}
+
+function autoSubmitWord(){
+  const word = document.getElementById('wordInput').value;
+  submitWord(word);
+}
+
+document.getElementById('wordInput').addEventListener('keydown', e=>{
+  resetAutoSubmit();
+  if(e.key==='Enter'){
+    submitWord(e.target.value);
   }
 });
 
@@ -380,7 +364,10 @@ document.getElementById('startBtn').addEventListener('click', ()=>{
 document.addEventListener('keydown', e=>{
   if(e.code==='Space'){
     const oldEnd = document.getElementById('endText');
-    if(oldEnd){ oldEnd.style.display='none'; oldEnd.innerHTML=''; }
+    if(oldEnd){
+      oldEnd.style.display='none';
+      oldEnd.innerHTML=''; 
+    }
     totalScore=0;
     foundWords.clear();
     document.getElementById('wordList').innerHTML='';
